@@ -1,0 +1,16 @@
+*.class
+metals.sbt
+.DS_Store
+target/
+boot/
+lib_managed/
+src_managed/
+project/plugins/project/.bsp/
+./test-template/
+.terraform/
+.metals/
+.idea/
+.bloop/
+.bsp/
+.vscode/
+.history/
