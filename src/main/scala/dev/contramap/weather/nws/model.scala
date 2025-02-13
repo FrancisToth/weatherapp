@@ -2,10 +2,8 @@ package dev.contramap.weather
 package nws
 
 import io.circe.*
-import sttp.client3.*
-import sttp.model.Uri
-
 import java.time.Instant
+import sttp.model.Uri
 
 final case class Period(
     startTime: Instant,

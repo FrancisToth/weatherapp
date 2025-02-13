@@ -1,17 +1,14 @@
 package dev.contramap.weather
 package nws
 
-import cats.effect.IO
 import cats.effect.kernel.Resource
+import cats.effect.{IO, Ref}
 import io.circe.*
 import io.circe.parser.*
 import sttp.capabilities.WebSockets
 import sttp.client3.*
 import sttp.client3.httpclient.cats.HttpClientCatsBackend
 import sttp.model.Uri
-
-import java.time.Instant
-import cats.effect.Ref
 
 trait Service:
   def points(geo: Geo): IO[List[Period]]
@@ -37,29 +34,24 @@ object Service:
     def points(geo: Geo): IO[List[Period]] =
       getForecast(geo)
         .flatMap(getPeriods)
+        .handleError { case Error("Data Unavailable For Requested Point") =>
+          List.empty
+        }
 
-    private def getPeriods(uri: Uri) = {
+    private def getPeriods(uri: Uri) =
       val req = basicRequest.get(uri)
       val res = req.send(backend)
+      res.flatMap(deserialize[Forecast]).map(_.properties.periods)
 
-      res.flatMap((response: Response[Either[String, String]]) =>
-        response.body.flatMap(decode[Forecast]) match
-          case Left(e: io.circe.Error) => IO.raiseError(Error(e.getMessage()))
-          case Left(e: String)         => IO.raiseError(Error(e))
-          case Right(forecast)         => IO.pure(forecast.properties.periods)
-      )
-    }
-
-    private def getForecast(geo: Geo): IO[Uri] = {
+    private def getForecast(geo: Geo): IO[Uri] =
       val Geo(lat, long) = geo
 
       val req = basicRequest.get(uri"https://api.weather.gov/points/$lat,$long")
       val res = req.send(backend)
+      res.flatMap(deserialize[GridForecast]).map(_.properties.forecastHourly)
 
-      res.flatMap((response: Response[Either[String, String]]) =>
-        response.body.flatMap(decode[GridForecast]) match
-          case Left(e: io.circe.Error) => IO.raiseError(Error(e.getMessage()))
-          case Left(e: String)         => IO.raiseError(Error(e))
-          case Right(grid)             => IO.pure(grid.properties.forecastHourly)
-      )
-    }
+    private def deserialize[A: Decoder](r: Response[Either[String, String]]) =
+      r.body.flatMap(decode[A]) match
+        case Left(e: io.circe.Error) => IO.raiseError(Error(e.getMessage()))
+        case Left(e: String)         => IO.raiseError(Error(e))
+        case Right(a)                => IO.pure(a)
